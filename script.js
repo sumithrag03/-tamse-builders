@@ -991,8 +991,7 @@ const contactSubmit =
     separately, change this URL later.
 */
 const CONTACT_API_URL =
-    "http://localhost:5000/api/enquiry";
-
+     "https://tamse-builders-api.onrender.com/api/enquiry";
 
 if (contactForm) {
 
