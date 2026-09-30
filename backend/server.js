@@ -1,6 +1,6 @@
-/*==========================================
+/* ==========================================
    TAMSE BUILDERS - BACKEND SERVER
-==========================================*/
+========================================== */
 
 require("dotenv").config();
 
@@ -11,22 +11,18 @@ const { Resend } = require("resend");
 const { addEnquiry } = require("./services/googleSheets");
 
 
-/*
-==========================================
+/* ==========================================
    APP INITIALIZATION
-==========================================
-*/
+========================================== */
 
 const app = express();
 
 const PORT = process.env.PORT || 5000;
 
 
-/*
-==========================================
+/* ==========================================
    MIDDLEWARE
-==========================================
-*/
+========================================== */
 
 app.use(
     cors({
@@ -50,11 +46,9 @@ app.use(
 );
 
 
-/*
-==========================================
+/* ==========================================
    BASIC HEALTH CHECK
-==========================================
-*/
+========================================== */
 
 app.get("/", (req, res) => {
 
@@ -66,22 +60,18 @@ app.get("/", (req, res) => {
 });
 
 
-/*
-==========================================
+/* ==========================================
    RESEND EMAIL CONFIGURATION
-==========================================
-*/
+========================================== */
 
 const resend = new Resend(
     process.env.RESEND_API_KEY
 );
 
 
-/*
-==========================================
+/* ==========================================
    VALIDATE EMAIL
-==========================================
-*/
+========================================== */
 
 function isValidEmail(email) {
 
@@ -93,11 +83,9 @@ function isValidEmail(email) {
 }
 
 
-/*
-==========================================
+/* ==========================================
    ESCAPE HTML
-==========================================
-*/
+========================================== */
 
 function escapeHtml(value) {
 
@@ -111,11 +99,9 @@ function escapeHtml(value) {
 }
 
 
-/*
-==========================================
+/* ==========================================
    POST /api/enquiry
-==========================================
-*/
+========================================== */
 
 app.post(
     "/api/enquiry",
@@ -136,11 +122,9 @@ app.post(
 
         try {
 
-            /*
-            ==========================================
+            /* ==========================================
                GET DATA FROM REQUEST
-            ==========================================
-            */
+            ========================================== */
 
             const {
                 name,
@@ -153,48 +137,21 @@ app.post(
             } = req.body;
 
 
-            /*
-            ==========================================
+            /* ==========================================
                LOG RECEIVED DATA
-            ==========================================
-            */
+            ========================================== */
 
-            console.log(
-                "Name:",
-                name
-            );
-
-            console.log(
-                "Phone:",
-                phone
-            );
-
-            console.log(
-                "Email:",
-                email
-            );
-
-            console.log(
-                "Project Type:",
-                projectType
-            );
-
-            console.log(
-                "Budget:",
-                budget
-            );
-
-            console.log(
-                "Location:",
-                location
-            );
+            console.log("Name:", name);
+            console.log("Phone:", phone);
+            console.log("Email:", email);
+            console.log("Project Type:", projectType);
+            console.log("Budget:", budget);
+            console.log("Location:", location);
 
 
-            /*
-            ==========================================
+            /* ==========================================
                SERVER-SIDE VALIDATION
-            ==========================================
-            */
+            ========================================== */
 
             if (
                 !name ||
@@ -221,11 +178,9 @@ app.post(
             }
 
 
-            /*
-            ==========================================
+            /* ==========================================
                EMAIL VALIDATION
-            ==========================================
-            */
+            ========================================== */
 
             if (
                 !isValidEmail(
@@ -245,11 +200,9 @@ app.post(
             }
 
 
-            /*
-            ==========================================
+            /* ==========================================
                CLEAN DATA
-            ==========================================
-            */
+            ========================================== */
 
             const enquiry = {
 
@@ -282,11 +235,55 @@ app.post(
             };
 
 
-            /*
-            ==========================================
-               RESEND API KEY CHECK
-            ==========================================
-            */
+            /* ==========================================
+               GOOGLE SHEETS
+               
+               IMPORTANT:
+               Save enquiry FIRST.
+               
+               This means email failure will not
+               prevent the enquiry from being saved.
+            ========================================== */
+
+            console.log(
+                "📊 Adding enquiry to Google Sheet..."
+            );
+
+            try {
+
+                await addEnquiry(
+                    enquiry
+                );
+
+                console.log(
+                    "✅ Enquiry added to Google Sheet."
+                );
+
+            } catch (sheetError) {
+
+                console.error(
+                    "❌ Google Sheet update failed:"
+                );
+
+                console.error(
+                    sheetError
+                );
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        "Your enquiry could not be saved. Please try again later."
+
+                });
+
+            }
+
+
+            /* ==========================================
+               RESEND CONFIGURATION CHECK
+            ========================================== */
 
             if (
                 !process.env.RESEND_API_KEY
@@ -296,23 +293,28 @@ app.post(
                     "❌ RESEND_API_KEY is missing."
                 );
 
-                return res.status(500).json({
+                /*
+                 * IMPORTANT:
+                 * Google Sheet is already updated.
+                 *
+                 * Therefore we do NOT return 500 here.
+                 */
 
-                    success: false,
+                return res.status(200).json({
+
+                    success: true,
+
+                    sheetUpdated: true,
+
+                    ownerEmailSent: false,
 
                     message:
-                        "Email service is not configured correctly."
+                        "Your enquiry has been received successfully."
 
                 });
 
             }
 
-
-            /*
-            ==========================================
-               RESEND FROM EMAIL CHECK
-            ==========================================
-            */
 
             if (
                 !process.env.RESEND_FROM_EMAIL
@@ -322,23 +324,21 @@ app.post(
                     "❌ RESEND_FROM_EMAIL is missing."
                 );
 
-                return res.status(500).json({
+                return res.status(200).json({
 
-                    success: false,
+                    success: true,
+
+                    sheetUpdated: true,
+
+                    ownerEmailSent: false,
 
                     message:
-                        "Email sender is not configured."
+                        "Your enquiry has been received successfully."
 
                 });
 
             }
 
-
-            /*
-            ==========================================
-               OWNER EMAIL CHECK
-            ==========================================
-            */
 
             if (
                 !process.env.TAMSE_EMAIL
@@ -348,23 +348,25 @@ app.post(
                     "❌ TAMSE_EMAIL is missing."
                 );
 
-                return res.status(500).json({
+                return res.status(200).json({
 
-                    success: false,
+                    success: true,
+
+                    sheetUpdated: true,
+
+                    ownerEmailSent: false,
 
                     message:
-                        "Owner email is not configured."
+                        "Your enquiry has been received successfully."
 
                 });
 
             }
 
 
-            /*
-            ==========================================
+            /* ==========================================
                OWNER EMAIL
-            ==========================================
-            */
+            ========================================== */
 
             const ownerMail = {
 
@@ -398,7 +400,6 @@ app.post(
 
                         </h2>
 
-
                         <p>
 
                             A new enquiry has been submitted
@@ -417,23 +418,16 @@ app.post(
                             "
                         >
 
-
                             <tr>
 
                                 <td>
-
-                                    <strong>
-                                        Name
-                                    </strong>
-
+                                    <strong>Name</strong>
                                 </td>
 
                                 <td>
-
                                     ${escapeHtml(
                                         enquiry.name
                                     )}
-
                                 </td>
 
                             </tr>
@@ -442,19 +436,13 @@ app.post(
                             <tr>
 
                                 <td>
-
-                                    <strong>
-                                        Phone
-                                    </strong>
-
+                                    <strong>Phone</strong>
                                 </td>
 
                                 <td>
-
                                     ${escapeHtml(
                                         enquiry.phone
                                     )}
-
                                 </td>
 
                             </tr>
@@ -463,19 +451,13 @@ app.post(
                             <tr>
 
                                 <td>
-
-                                    <strong>
-                                        Email
-                                    </strong>
-
+                                    <strong>Email</strong>
                                 </td>
 
                                 <td>
-
                                     ${escapeHtml(
                                         enquiry.email
                                     )}
-
                                 </td>
 
                             </tr>
@@ -484,19 +466,13 @@ app.post(
                             <tr>
 
                                 <td>
-
-                                    <strong>
-                                        Project Type
-                                    </strong>
-
+                                    <strong>Project Type</strong>
                                 </td>
 
                                 <td>
-
                                     ${escapeHtml(
                                         enquiry.projectType
                                     )}
-
                                 </td>
 
                             </tr>
@@ -505,11 +481,7 @@ app.post(
                             <tr>
 
                                 <td>
-
-                                    <strong>
-                                        Budget
-                                    </strong>
-
+                                    <strong>Budget</strong>
                                 </td>
 
                                 <td>
@@ -530,19 +502,13 @@ app.post(
                             <tr>
 
                                 <td>
-
-                                    <strong>
-                                        Location
-                                    </strong>
-
+                                    <strong>Location</strong>
                                 </td>
 
                                 <td>
-
                                     ${escapeHtml(
                                         enquiry.location
                                     )}
-
                                 </td>
 
                             </tr>
@@ -551,19 +517,13 @@ app.post(
                             <tr>
 
                                 <td>
-
-                                    <strong>
-                                        Message
-                                    </strong>
-
+                                    <strong>Message</strong>
                                 </td>
 
                                 <td>
-
                                     ${escapeHtml(
                                         enquiry.message
                                     )}
-
                                 </td>
 
                             </tr>
@@ -572,21 +532,14 @@ app.post(
                             <tr>
 
                                 <td>
-
-                                    <strong>
-                                        Status
-                                    </strong>
-
+                                    <strong>Status</strong>
                                 </td>
 
                                 <td>
-
                                     New
-
                                 </td>
 
                             </tr>
-
 
                         </table>
 
@@ -601,7 +554,6 @@ app.post(
 
                         </p>
 
-
                     </div>
 
                 `
@@ -609,65 +561,127 @@ app.post(
             };
 
 
-            /*
-            ==========================================
-               SEND OWNER EMAIL USING RESEND
-            ==========================================
-            */
+            /* ==========================================
+               SEND OWNER EMAIL
+            ========================================== */
 
             console.log(
                 "📧 Sending owner email..."
             );
 
+            try {
 
-            const {
-                data: ownerData,
-                error: ownerError
-            } = await resend.emails.send({
+                const {
+                    data: ownerData,
+                    error: ownerError
+                } = await resend.emails.send({
 
-                from:
-                    ownerMail.from,
+                    from:
+                        ownerMail.from,
 
-                to:
-                    [ownerMail.to],
+                    to:
+                        [ownerMail.to],
 
-                replyTo:
-                    ownerMail.replyTo,
+                    replyTo:
+                        ownerMail.replyTo,
 
-                subject:
-                    ownerMail.subject,
+                    subject:
+                        ownerMail.subject,
 
-                html:
-                    ownerMail.html
+                    html:
+                        ownerMail.html
 
-            });
+                });
 
 
-            if (ownerError) {
+                if (ownerError) {
+
+                    console.error(
+                        "❌ Owner email failed:"
+                    );
+
+                    console.error(
+                        ownerError
+                    );
+
+                    /*
+                     * IMPORTANT:
+                     * Google Sheet already contains
+                     * the enquiry.
+                     *
+                     * Therefore don't return 500.
+                     */
+
+                    return res.status(200).json({
+
+                        success: true,
+
+                        sheetUpdated: true,
+
+                        ownerEmailSent: false,
+
+                        message:
+                            "Your enquiry has been received successfully."
+
+                    });
+
+                }
+
+
+                console.log(
+                    "✅ Owner email sent:",
+                    ownerData?.id
+                );
+
+
+            } catch (ownerEmailError) {
 
                 console.error(
-                    "❌ Owner email failed:",
-                    ownerError
+                    "❌ Owner email exception:"
                 );
 
-                throw new Error(
-                    `Owner email failed: ${ownerError.message}`
+                console.error(
+                    ownerEmailError
                 );
+
+                /*
+                 * Enquiry is already saved
+                 * in Google Sheet.
+                 */
+
+                return res.status(200).json({
+
+                    success: true,
+
+                    sheetUpdated: true,
+
+                    ownerEmailSent: false,
+
+                    message:
+                        "Your enquiry has been received successfully."
+
+                });
 
             }
 
 
-            console.log(
-                "✅ Owner email sent:",
-                ownerData?.id
-            );
+            /* ==========================================
+               CUSTOMER CONFIRMATION EMAIL
+               
+               TEMPORARILY DISABLED
+               
+               DO NOT DELETE.
+               
+               AFTER:
+               1. Purchase domain
+               2. Verify domain in Resend
+               3. Configure sender email
+               
+               Uncomment this section.
+            ========================================== */
 
 
-            /*
-            ==========================================
-               CLIENT CONFIRMATION EMAIL
-            ==========================================
-            */
+/*
 
             const clientMail = {
 
@@ -689,7 +703,6 @@ app.post(
                         padding: 20px;
                         color: #222;
                     ">
-
 
                         <h2 style="
                             color: #071D3A;
@@ -799,19 +812,12 @@ app.post(
 
                         </p>
 
-
                     </div>
 
                 `
 
             };
 
-
-            /*
-            ==========================================
-               SEND CLIENT EMAIL USING RESEND
-            ==========================================
-            */
 
             console.log(
                 "📧 Sending client confirmation email..."
@@ -845,45 +851,21 @@ app.post(
                     clientError
                 );
 
-                throw new Error(
-                    `Client email failed: ${clientError.message}`
+            } else {
+
+                console.log(
+                    "✅ Client confirmation email sent:",
+                    clientData?.id
                 );
 
             }
 
-
-            console.log(
-                "✅ Client confirmation email sent:",
-                clientData?.id
-            );
+*/
 
 
-            /*
-            ==========================================
-               GOOGLE SHEETS
-            ==========================================
-            */
-
-            console.log(
-                "📊 Adding enquiry to Google Sheet..."
-            );
-
-
-            await addEnquiry(
-                enquiry
-            );
-
-
-            console.log(
-                "✅ Enquiry added to Google Sheet."
-            );
-
-
-            /*
-            ==========================================
+            /* ==========================================
                FINAL SUCCESS RESPONSE
-            ==========================================
-            */
+            ========================================== */
 
             console.log(
                 "========================================"
@@ -902,6 +884,10 @@ app.post(
 
                 success: true,
 
+                sheetUpdated: true,
+
+                ownerEmailSent: true,
+
                 message:
                     "Thank you! Your enquiry has been submitted successfully."
 
@@ -911,11 +897,9 @@ app.post(
         } catch (error) {
 
 
-            /*
-            ==========================================
+            /* ==========================================
                ENQUIRY ERROR
-            ==========================================
-            */
+            ========================================== */
 
             console.error(
                 "\n❌ ENQUIRY PROCESS FAILED"
@@ -961,11 +945,9 @@ app.post(
 );
 
 
-/*
-==========================================
+/* ==========================================
    404 HANDLER
-==========================================
-*/
+========================================== */
 
 app.use(
     (req, res) => {
@@ -983,11 +965,9 @@ app.use(
 );
 
 
-/*
-==========================================
+/* ==========================================
    GLOBAL ERROR HANDLER
-==========================================
-*/
+========================================== */
 
 app.use(
     (
@@ -1025,11 +1005,9 @@ app.use(
 );
 
 
-/*
-==========================================
+/* ==========================================
    START SERVER
-==========================================
-*/
+========================================== */
 
 console.log(
     "🔵 About to start HTTP server..."
@@ -1080,11 +1058,9 @@ const server = app.listen(
 );
 
 
-/*
-==========================================
+/* ==========================================
    SERVER EVENTS
-==========================================
-*/
+========================================== */
 
 server.on(
     "listening",
@@ -1138,11 +1114,9 @@ server.on(
 );
 
 
-/*
-==========================================
+/* ==========================================
    NODE PROCESS EVENTS
-==========================================
-*/
+========================================== */
 
 process.on(
     "beforeExit",

@@ -990,8 +990,19 @@ const contactSubmit =
     If your frontend and backend are deployed
     separately, change this URL later.
 */
+const isLocalDevelopment =
+    window.location.protocol === "file:" ||
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+
 const CONTACT_API_URL =
-     "https://tamse-builders-api.onrender.com/api/enquiry";
+      window.location.protocol === "file:"
+        ? "http://localhost:5000/api/enquiry"
+        : "https://tamse-builders-api.onrender.com/api/enquiry";
+console.log(
+    "TAMSE Contact API:",
+    CONTACT_API_URL
+);
 
 if (contactForm) {
 
