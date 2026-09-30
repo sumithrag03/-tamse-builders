@@ -1,52 +1,46 @@
-/* ==========================================
+/*==========================================
    TAMSE BUILDERS - BACKEND SERVER
-========================================== */
+==========================================*/
 
 require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-const { addEnquiry } =
-    require("./services/googleSheets");
+const { addEnquiry } = require("./services/googleSheets");
 
 
-/* ==========================================
+/*
+==========================================
    APP INITIALIZATION
-========================================== */
+==========================================
+*/
 
 const app = express();
 
-const PORT =
-    process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 
 
-/* ==========================================
+/*
+==========================================
    MIDDLEWARE
-========================================== */
+==========================================
+*/
 
 app.use(
     cors({
         origin: true,
-        methods: [
-            "GET",
-            "POST",
-            "OPTIONS"
-        ],
-        allowedHeaders: [
-            "Content-Type"
-        ]
+        methods: ["GET", "POST", "OPTIONS"],
+        allowedHeaders: ["Content-Type"]
     })
 );
-
 
 app.use(
     express.json({
         limit: "1mb"
     })
 );
-
 
 app.use(
     express.urlencoded({
@@ -56,76 +50,38 @@ app.use(
 );
 
 
-/* ==========================================
+/*
+==========================================
    BASIC HEALTH CHECK
-========================================== */
+==========================================
+*/
 
-app.get(
-    "/",
-    (req, res) => {
+app.get("/", (req, res) => {
 
-        res.status(200).json({
-            success: true,
-            message:
-                "TAMSE Builders backend is running."
-        });
-
-    }
-);
-
-
-/* ==========================================
-   EMAIL CONFIGURATION
-========================================== */
-
-const transporter =
-    nodemailer.createTransport({
-
-        service: "gmail",
-
-        auth: {
-
-            user:
-                process.env.EMAIL_USER,
-
-            pass:
-                process.env.EMAIL_APP_PASSWORD
-
-        }
-
+    res.status(200).json({
+        success: true,
+        message: "TAMSE Builders backend is running."
     });
 
+});
 
-/* ==========================================
-   VERIFY EMAIL CONFIGURATION
-========================================== */
 
-transporter.verify(
-    function (error, success) {
+/*
+==========================================
+   RESEND EMAIL CONFIGURATION
+==========================================
+*/
 
-        if (error) {
-
-            console.error(
-                "❌ Email configuration error:"
-            );
-
-            console.error(error);
-
-        } else {
-
-            console.log(
-                "✅ Email server is ready."
-            );
-
-        }
-
-    }
+const resend = new Resend(
+    process.env.RESEND_API_KEY
 );
 
 
-/* ==========================================
+/*
+==========================================
    VALIDATE EMAIL
-========================================== */
+==========================================
+*/
 
 function isValidEmail(email) {
 
@@ -137,9 +93,29 @@ function isValidEmail(email) {
 }
 
 
-/* ==========================================
+/*
+==========================================
+   ESCAPE HTML
+==========================================
+*/
+
+function escapeHtml(value) {
+
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+}
+
+
+/*
+==========================================
    POST /api/enquiry
-========================================== */
+==========================================
+*/
 
 app.post(
     "/api/enquiry",
@@ -160,9 +136,11 @@ app.post(
 
         try {
 
-            /* ==========================================
+            /*
+            ==========================================
                GET DATA FROM REQUEST
-            ========================================== */
+            ==========================================
+            */
 
             const {
                 name,
@@ -175,9 +153,11 @@ app.post(
             } = req.body;
 
 
-            /* ==========================================
+            /*
+            ==========================================
                LOG RECEIVED DATA
-            ========================================== */
+            ==========================================
+            */
 
             console.log(
                 "Name:",
@@ -210,9 +190,11 @@ app.post(
             );
 
 
-            /* ==========================================
+            /*
+            ==========================================
                SERVER-SIDE VALIDATION
-            ========================================== */
+            ==========================================
+            */
 
             if (
                 !name ||
@@ -227,7 +209,6 @@ app.post(
                     "❌ Required enquiry fields are missing."
                 );
 
-
                 return res.status(400).json({
 
                     success: false,
@@ -240,13 +221,15 @@ app.post(
             }
 
 
-            /* ==========================================
+            /*
+            ==========================================
                EMAIL VALIDATION
-            ========================================== */
+            ==========================================
+            */
 
             if (
                 !isValidEmail(
-                    email.trim()
+                    String(email).trim()
                 )
             ) {
 
@@ -262,9 +245,11 @@ app.post(
             }
 
 
-            /* ==========================================
+            /*
+            ==========================================
                CLEAN DATA
-            ========================================== */
+            ==========================================
+            */
 
             const enquiry = {
 
@@ -297,19 +282,19 @@ app.post(
             };
 
 
-            /* ==========================================
-               EMAIL CONFIG CHECK
-            ========================================== */
+            /*
+            ==========================================
+               RESEND API KEY CHECK
+            ==========================================
+            */
 
             if (
-                !process.env.EMAIL_USER ||
-                !process.env.EMAIL_APP_PASSWORD
+                !process.env.RESEND_API_KEY
             ) {
 
                 console.error(
-                    "❌ EMAIL_USER or EMAIL_APP_PASSWORD is missing."
+                    "❌ RESEND_API_KEY is missing."
                 );
-
 
                 return res.status(500).json({
 
@@ -323,6 +308,38 @@ app.post(
             }
 
 
+            /*
+            ==========================================
+               RESEND FROM EMAIL CHECK
+            ==========================================
+            */
+
+            if (
+                !process.env.RESEND_FROM_EMAIL
+            ) {
+
+                console.error(
+                    "❌ RESEND_FROM_EMAIL is missing."
+                );
+
+                return res.status(500).json({
+
+                    success: false,
+
+                    message:
+                        "Email sender is not configured."
+
+                });
+
+            }
+
+
+            /*
+            ==========================================
+               OWNER EMAIL CHECK
+            ==========================================
+            */
+
             if (
                 !process.env.TAMSE_EMAIL
             ) {
@@ -330,7 +347,6 @@ app.post(
                 console.error(
                     "❌ TAMSE_EMAIL is missing."
                 );
-
 
                 return res.status(500).json({
 
@@ -344,14 +360,16 @@ app.post(
             }
 
 
-            /* ==========================================
+            /*
+            ==========================================
                OWNER EMAIL
-            ========================================== */
+            ==========================================
+            */
 
             const ownerMail = {
 
                 from:
-                    `"TAMSE Builders Website" <${process.env.EMAIL_USER}>`,
+                    process.env.RESEND_FROM_EMAIL,
 
                 to:
                     process.env.TAMSE_EMAIL,
@@ -369,17 +387,25 @@ app.post(
                         max-width: 700px;
                         margin: auto;
                         padding: 20px;
+                        color: #222;
                     ">
 
-                        <h2>
+                        <h2 style="
+                            color: #071D3A;
+                        ">
+
                             New Enquiry - TAMSE Builders
+
                         </h2>
 
+
                         <p>
-                            A new enquiry has been
-                            submitted through the
-                            TAMSE Builders website.
+
+                            A new enquiry has been submitted
+                            through the TAMSE Builders website.
+
                         </p>
+
 
                         <table
                             cellpadding="10"
@@ -391,64 +417,103 @@ app.post(
                             "
                         >
 
+
                             <tr>
+
                                 <td>
-                                    <strong>Name</strong>
+
+                                    <strong>
+                                        Name
+                                    </strong>
+
                                 </td>
 
                                 <td>
+
                                     ${escapeHtml(
                                         enquiry.name
                                     )}
+
                                 </td>
+
                             </tr>
 
 
                             <tr>
+
                                 <td>
-                                    <strong>Phone</strong>
+
+                                    <strong>
+                                        Phone
+                                    </strong>
+
                                 </td>
 
                                 <td>
+
                                     ${escapeHtml(
                                         enquiry.phone
                                     )}
+
                                 </td>
+
                             </tr>
 
 
                             <tr>
+
                                 <td>
-                                    <strong>Email</strong>
+
+                                    <strong>
+                                        Email
+                                    </strong>
+
                                 </td>
 
                                 <td>
+
                                     ${escapeHtml(
                                         enquiry.email
                                     )}
+
                                 </td>
+
                             </tr>
 
 
                             <tr>
+
                                 <td>
-                                    <strong>Project Type</strong>
+
+                                    <strong>
+                                        Project Type
+                                    </strong>
+
                                 </td>
 
                                 <td>
+
                                     ${escapeHtml(
                                         enquiry.projectType
                                     )}
+
                                 </td>
+
                             </tr>
 
 
                             <tr>
+
                                 <td>
-                                    <strong>Budget</strong>
+
+                                    <strong>
+                                        Budget
+                                    </strong>
+
                                 </td>
 
                                 <td>
+
                                     ${
                                         enquiry.budget
                                             ? escapeHtml(
@@ -456,45 +521,72 @@ app.post(
                                             )
                                             : "Not specified"
                                     }
+
                                 </td>
+
                             </tr>
 
 
                             <tr>
+
                                 <td>
-                                    <strong>Location</strong>
+
+                                    <strong>
+                                        Location
+                                    </strong>
+
                                 </td>
 
                                 <td>
+
                                     ${escapeHtml(
                                         enquiry.location
                                     )}
+
                                 </td>
+
                             </tr>
 
 
                             <tr>
+
                                 <td>
-                                    <strong>Message</strong>
+
+                                    <strong>
+                                        Message
+                                    </strong>
+
                                 </td>
 
                                 <td>
+
                                     ${escapeHtml(
                                         enquiry.message
                                     )}
+
                                 </td>
+
                             </tr>
 
 
                             <tr>
+
                                 <td>
-                                    <strong>Status</strong>
+
+                                    <strong>
+                                        Status
+                                    </strong>
+
                                 </td>
 
                                 <td>
+
                                     New
+
                                 </td>
+
                             </tr>
+
 
                         </table>
 
@@ -503,9 +595,12 @@ app.post(
                             margin-top:20px;
                             color:#666;
                         ">
+
                             This enquiry was submitted
                             from the TAMSE Builders website.
+
                         </p>
+
 
                     </div>
 
@@ -514,33 +609,70 @@ app.post(
             };
 
 
-            /* ==========================================
-               SEND OWNER EMAIL
-            ========================================== */
+            /*
+            ==========================================
+               SEND OWNER EMAIL USING RESEND
+            ==========================================
+            */
 
             console.log(
                 "📧 Sending owner email..."
             );
 
 
-            await transporter.sendMail(
-                ownerMail
-            );
+            const {
+                data: ownerData,
+                error: ownerError
+            } = await resend.emails.send({
+
+                from:
+                    ownerMail.from,
+
+                to:
+                    [ownerMail.to],
+
+                replyTo:
+                    ownerMail.replyTo,
+
+                subject:
+                    ownerMail.subject,
+
+                html:
+                    ownerMail.html
+
+            });
+
+
+            if (ownerError) {
+
+                console.error(
+                    "❌ Owner email failed:",
+                    ownerError
+                );
+
+                throw new Error(
+                    `Owner email failed: ${ownerError.message}`
+                );
+
+            }
 
 
             console.log(
-                "✅ Owner email sent."
+                "✅ Owner email sent:",
+                ownerData?.id
             );
 
 
-            /* ==========================================
+            /*
+            ==========================================
                CLIENT CONFIRMATION EMAIL
-            ========================================== */
+            ==========================================
+            */
 
             const clientMail = {
 
                 from:
-                    `"TAMSE Builders" <${process.env.EMAIL_USER}>`,
+                    process.env.RESEND_FROM_EMAIL,
 
                 to:
                     enquiry.email,
@@ -555,37 +687,51 @@ app.post(
                         max-width: 700px;
                         margin: auto;
                         padding: 20px;
+                        color: #222;
                     ">
 
-                        <h2>
-                            Thank You, ${escapeHtml(
-                                enquiry.name
-                            )}!
+
+                        <h2 style="
+                            color: #071D3A;
+                        ">
+
+                            Thank You,
+                            ${escapeHtml(enquiry.name)}!
+
                         </h2>
 
 
                         <p>
+
                             We have received your
                             enquiry successfully.
+
                         </p>
 
 
                         <p>
+
                             Our TAMSE Builders team
                             will review your requirements
                             and contact you soon.
+
                         </p>
 
 
                         <hr>
 
 
-                        <h3>
+                        <h3 style="
+                            color: #E5B52F;
+                        ">
+
                             Your Enquiry Details
+
                         </h3>
 
 
                         <p>
+
                             <strong>
                                 Project Type:
                             </strong>
@@ -593,10 +739,12 @@ app.post(
                             ${escapeHtml(
                                 enquiry.projectType
                             )}
+
                         </p>
 
 
                         <p>
+
                             <strong>
                                 Budget:
                             </strong>
@@ -608,10 +756,12 @@ app.post(
                                     )
                                     : "Not specified"
                             }
+
                         </p>
 
 
                         <p>
+
                             <strong>
                                 Location:
                             </strong>
@@ -619,10 +769,12 @@ app.post(
                             ${escapeHtml(
                                 enquiry.location
                             )}
+
                         </p>
 
 
                         <p>
+
                             <strong>
                                 Message:
                             </strong>
@@ -630,6 +782,7 @@ app.post(
                             ${escapeHtml(
                                 enquiry.message
                             )}
+
                         </p>
 
 
@@ -637,12 +790,15 @@ app.post(
 
 
                         <p>
+
                             Regards,<br>
 
                             <strong>
                                 TAMSE Builders
                             </strong>
+
                         </p>
+
 
                     </div>
 
@@ -651,28 +807,62 @@ app.post(
             };
 
 
-            /* ==========================================
-               SEND CLIENT EMAIL
-            ========================================== */
+            /*
+            ==========================================
+               SEND CLIENT EMAIL USING RESEND
+            ==========================================
+            */
 
             console.log(
                 "📧 Sending client confirmation email..."
             );
 
 
-            await transporter.sendMail(
-                clientMail
-            );
+            const {
+                data: clientData,
+                error: clientError
+            } = await resend.emails.send({
+
+                from:
+                    clientMail.from,
+
+                to:
+                    [clientMail.to],
+
+                subject:
+                    clientMail.subject,
+
+                html:
+                    clientMail.html
+
+            });
+
+
+            if (clientError) {
+
+                console.error(
+                    "❌ Client email failed:",
+                    clientError
+                );
+
+                throw new Error(
+                    `Client email failed: ${clientError.message}`
+                );
+
+            }
 
 
             console.log(
-                "✅ Client confirmation email sent."
+                "✅ Client confirmation email sent:",
+                clientData?.id
             );
 
 
-            /* ==========================================
+            /*
+            ==========================================
                GOOGLE SHEETS
-            ========================================== */
+            ==========================================
+            */
 
             console.log(
                 "📊 Adding enquiry to Google Sheet..."
@@ -689,9 +879,11 @@ app.post(
             );
 
 
-            /* ==========================================
+            /*
+            ==========================================
                FINAL SUCCESS RESPONSE
-            ========================================== */
+            ==========================================
+            */
 
             console.log(
                 "========================================"
@@ -718,12 +910,39 @@ app.post(
 
         } catch (error) {
 
+
+            /*
+            ==========================================
+               ENQUIRY ERROR
+            ==========================================
+            */
+
             console.error(
                 "\n❌ ENQUIRY PROCESS FAILED"
             );
 
+
             console.error(
-                error
+                "Error message:",
+                error.message
+            );
+
+
+            console.error(
+                "Error code:",
+                error.code
+            );
+
+
+            console.error(
+                "Error command:",
+                error.command
+            );
+
+
+            console.error(
+                "Error response:",
+                error.response
             );
 
 
@@ -742,42 +961,11 @@ app.post(
 );
 
 
-/* ==========================================
-   ESCAPE HTML
-   Prevents user-entered enquiry data from
-   being interpreted as HTML in emails.
-========================================== */
-
-function escapeHtml(value) {
-
-    return String(value || "")
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
-
-}
-
-
-/* ==========================================
+/*
+==========================================
    404 HANDLER
-========================================== */
+==========================================
+*/
 
 app.use(
     (req, res) => {
@@ -795,9 +983,11 @@ app.use(
 );
 
 
-/* ==========================================
+/*
+==========================================
    GLOBAL ERROR HANDLER
-========================================== */
+==========================================
+*/
 
 app.use(
     (
@@ -813,7 +1003,9 @@ app.use(
         );
 
 
-        if (res.headersSent) {
+        if (
+            res.headersSent
+        ) {
 
             return next(error);
 
@@ -833,94 +1025,146 @@ app.use(
 );
 
 
-// ==========================================
-// START SERVER
-// ==========================================
+/*
+==========================================
+   START SERVER
+==========================================
+*/
 
-console.log("🔵 About to start HTTP server...");
-
-const server = app.listen(PORT, () => {
-
-    console.log("");
-    console.log("========================================");
-    console.log("🏗️ TAMSE BUILDERS BACKEND");
-    console.log("========================================");
-
-    console.log(
-        `🚀 Server running on port ${PORT}`
-    );
-
-    console.log(
-        `🌐 API: http://localhost:${PORT}`
-    );
-
-    console.log(
-        `📩 Enquiry API: http://localhost:${PORT}/api/enquiry`
-    );
-
-    console.log("========================================");
-    console.log("");
-
-});
+console.log(
+    "🔵 About to start HTTP server..."
+);
 
 
-server.on("listening", () => {
+const server = app.listen(
+    PORT,
+    () => {
 
-    console.log(
-        "🟢 SERVER LISTENING EVENT FIRED"
-    );
+        console.log("");
 
-    console.log(
-        "🟢 Server address:",
-        server.address()
-    );
+        console.log(
+            "========================================"
+        );
 
-});
+        console.log(
+            "🏗️ TAMSE BUILDERS BACKEND"
+        );
 
-
-server.on("close", () => {
-
-    console.log(
-        "🔴 SERVER CLOSE EVENT FIRED"
-    );
-
-});
+        console.log(
+            "========================================"
+        );
 
 
-server.on("error", (error) => {
-
-    console.error(
-        "========================================"
-    );
-
-    console.error(
-        "❌ SERVER ERROR"
-    );
-
-    console.error(
-        "========================================"
-    );
-
-    console.error(error);
-
-});
+        console.log(
+            `🚀 Server running on port ${PORT}`
+        );
 
 
-process.on("beforeExit", (code) => {
-
-    console.log(
-        "⚠️ NODE BEFORE EXIT:",
-        code
-    );
-
-});
+        console.log(
+            `🌐 API: http://localhost:${PORT}`
+        );
 
 
-process.on("exit", (code) => {
+        console.log(
+            `📩 Enquiry API: http://localhost:${PORT}/api/enquiry`
+        );
 
-    console.log(
-        "⚠️ NODE PROCESS EXIT:",
-        code
-    );
 
-});
+        console.log(
+            "========================================"
+        );
+
+        console.log("");
+
+    }
+);
+
+
+/*
+==========================================
+   SERVER EVENTS
+==========================================
+*/
+
+server.on(
+    "listening",
+    () => {
+
+        console.log(
+            "🟢 SERVER LISTENING EVENT FIRED"
+        );
+
+
+        console.log(
+            "🟢 Server address:",
+            server.address()
+        );
+
+    }
+);
+
+
+server.on(
+    "close",
+    () => {
+
+        console.log(
+            "🔴 SERVER CLOSE EVENT FIRED"
+        );
+
+    }
+);
+
+
+server.on(
+    "error",
+    (error) => {
+
+        console.error(
+            "========================================"
+        );
+
+        console.error(
+            "❌ SERVER ERROR"
+        );
+
+        console.error(
+            "========================================"
+        );
+
+        console.error(error);
+
+    }
+);
+
+
+/*
+==========================================
+   NODE PROCESS EVENTS
+==========================================
+*/
+
+process.on(
+    "beforeExit",
+    (code) => {
+
+        console.log(
+            "⚠️ NODE BEFORE EXIT:",
+            code
+        );
+
+    }
+);
+
+
+process.on(
+    "exit",
+    (code) => {
+
+        console.log(
+            "⚠️ NODE PROCESS EXIT:",
+            code
+        );
+
+    }
+);
