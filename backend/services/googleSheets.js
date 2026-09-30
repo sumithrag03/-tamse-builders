@@ -3,18 +3,7 @@
    GOOGLE SHEETS SERVICE
 ========================================== */
 
-const path = require("path");
 const { google } = require("googleapis");
-
-
-/* ==========================================
-   GOOGLE CREDENTIALS
-========================================== */
-
-const KEY_FILE = path.join(
-    __dirname,
-    "../google-credentials.json"
-);
 
 
 /* ==========================================
@@ -38,33 +27,107 @@ const SHEET_NAME = "Sheet1";
 
 async function getGoogleSheets() {
 
-    const auth =
-        new google.auth.GoogleAuth({
+    try {
 
-            keyFile: KEY_FILE,
-
-            scopes: [
-                "https://www.googleapis.com/auth/spreadsheets"
-            ]
-
-        });
+        console.log(
+            "🔐 Creating Google Sheets authentication..."
+        );
 
 
-    const client =
-        await auth.getClient();
+        /* ==========================================
+           GET SERVICE ACCOUNT FROM RENDER ENV
+        ========================================== */
+
+        if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+
+            throw new Error(
+                "GOOGLE_SERVICE_ACCOUNT_JSON environment variable is missing."
+            );
+
+        }
 
 
-    const sheets =
-        google.sheets({
-
-            version: "v4",
-
-            auth: client
-
-        });
+        const credentials =
+            JSON.parse(
+                process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+            );
 
 
-    return sheets;
+        /* ==========================================
+           FIX PRIVATE KEY NEWLINES
+        ========================================== */
+
+        if (credentials.private_key) {
+
+            credentials.private_key =
+                credentials.private_key.replace(
+                    /\\n/g,
+                    "\n"
+                );
+
+        }
+
+
+        /* ==========================================
+           GOOGLE AUTHENTICATION
+        ========================================== */
+
+        const auth =
+            new google.auth.GoogleAuth({
+
+                credentials: credentials,
+
+                scopes: [
+                    "https://www.googleapis.com/auth/spreadsheets"
+                ]
+
+            });
+
+
+        /* ==========================================
+           GET AUTH CLIENT
+        ========================================== */
+
+        const client =
+            await auth.getClient();
+
+
+        /* ==========================================
+           CREATE GOOGLE SHEETS CLIENT
+        ========================================== */
+
+        const sheets =
+            google.sheets({
+
+                version: "v4",
+
+                auth: client
+
+            });
+
+
+        console.log(
+            "✅ Google Sheets authentication successful."
+        );
+
+
+        return sheets;
+
+
+    } catch (error) {
+
+        console.error(
+            "❌ Google Sheets authentication failed:"
+        );
+
+        console.error(
+            error.message
+        );
+
+        throw error;
+
+    }
+
 }
 
 
@@ -81,16 +144,16 @@ async function addEnquiry(enquiry) {
         );
 
 
+        /* ==========================================
+           GET GOOGLE SHEETS CLIENT
+        ========================================== */
+
         const sheets =
             await getGoogleSheets();
 
 
         /* ==========================================
-           CONVERT EVERYTHING TO STRING
-
-           This is especially important for phone
-           numbers so Google Sheets doesn't try to
-           calculate/interpret them.
+           TIMESTAMP
         ========================================== */
 
         const timestamp =
@@ -102,40 +165,60 @@ async function addEnquiry(enquiry) {
             );
 
 
+        /* ==========================================
+           CONVERT VALUES TO STRING
+        ========================================== */
+
         const name =
-            String(enquiry.name || "");
+            String(
+                enquiry.name || ""
+            );
 
 
         const phone =
-            String(enquiry.phone || "");
+            String(
+                enquiry.phone || ""
+            );
 
 
         const email =
-            String(enquiry.email || "");
+            String(
+                enquiry.email || ""
+            );
 
 
         const projectType =
-            String(enquiry.projectType || "");
+            String(
+                enquiry.projectType || ""
+            );
 
 
         const budget =
-            String(enquiry.budget || "");
+            String(
+                enquiry.budget || ""
+            );
 
 
         const location =
-            String(enquiry.location || "");
+            String(
+                enquiry.location || ""
+            );
 
 
         const message =
-            String(enquiry.message || "");
+            String(
+                enquiry.message || ""
+            );
 
 
         const status =
-            String(enquiry.status || "New");
+            String(
+                enquiry.status || "New"
+            );
 
 
         /* ==========================================
-           CREATE ROW
+           CREATE GOOGLE SHEET ROW
 
            A = Date & Time
            B = Name
@@ -181,7 +264,7 @@ async function addEnquiry(enquiry) {
 
 
         /* ==========================================
-           APPEND ROW
+           APPEND ROW TO GOOGLE SHEET
         ========================================== */
 
         const response =
@@ -192,15 +275,6 @@ async function addEnquiry(enquiry) {
 
                 range:
                     `${SHEET_NAME}!A:I`,
-
-                /*
-                    RAW is important here.
-
-                    Google Sheets will store the
-                    values exactly as strings instead
-                    of trying to interpret phone
-                    numbers/formulas.
-                */
 
                 valueInputOption:
                     "RAW",
@@ -218,6 +292,10 @@ async function addEnquiry(enquiry) {
 
             });
 
+
+        /* ==========================================
+           SUCCESS
+        ========================================== */
 
         console.log(
             "✅ Google Sheet updated successfully."
@@ -242,8 +320,16 @@ async function addEnquiry(enquiry) {
 
     } catch (error) {
 
+        /* ==========================================
+           GOOGLE SHEETS ERROR
+        ========================================== */
+
         console.error(
             "❌ Google Sheets Error:"
+        );
+
+        console.error(
+            error.message
         );
 
         console.error(
@@ -262,5 +348,7 @@ async function addEnquiry(enquiry) {
 ========================================== */
 
 module.exports = {
+
     addEnquiry
+
 };
